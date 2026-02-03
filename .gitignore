@@ -1,0 +1,4 @@
+.vscode/
+atlc*
+env/
+*.bmp
