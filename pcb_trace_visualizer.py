@@ -1,6 +1,7 @@
 """
-PCB Trace Cross-Section Visualizer
+PCB Trace Cross-Section Visualizer with ATLC Integration
 A GUI application for generating BMP images of various PCB trace geometries
+and calculating transmission line parameters using ATLC
 """
 
 import tkinter as tk
@@ -12,13 +13,14 @@ import numpy as np
 from pathlib import Path
 from PIL import Image
 import io
+import subprocess
 
 
 class PCBTraceVisualizer:
     def __init__(self, root):
         self.root = root
-        self.root.title("PCB Trace Cross-Section Visualizer")
-        self.root.geometry("1000x700")
+        self.root.title("PCB Trace Visualizer with ATLC")
+        self.root.geometry("1000x850")
         
         # Configure style
         style = ttk.Style()
@@ -54,10 +56,11 @@ class PCBTraceVisualizer:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(1, weight=3)  # Give more weight to visualization row
+        main_frame.rowconfigure(2, weight=1)  # Output panel row
         
         # Title
-        title_label = ttk.Label(main_frame, text="PCB Trace Cross-Section Visualizer", 
+        title_label = ttk.Label(main_frame, text="PCB Trace Visualizer with ATLC", 
                                 style='Title.TLabel')
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 15), sticky=tk.W)
         
@@ -66,6 +69,9 @@ class PCBTraceVisualizer:
         
         # Right panel - Visualization
         self.setup_visualization_panel(main_frame)
+        
+        # Bottom panel - ATLC Output
+        self.setup_output_panel(main_frame)
         
     def setup_control_panel(self, parent):
         """Set up the control panel with inputs"""
@@ -107,7 +113,7 @@ class PCBTraceVisualizer:
         
         ttk.Button(button_frame, text="Generate", command=self.generate_visualization,
                   style='Custom.TButton').pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Save BMP", command=self.save_bmp,
+        ttk.Button(button_frame, text="Save BMP and Calculate Zo", command=self.save_bmp,
                   style='Custom.TButton').pack(side=tk.LEFT, padx=5)
         
     def setup_visualization_panel(self, parent):
@@ -133,6 +139,32 @@ class PCBTraceVisualizer:
         self.ax.axis('off')
         self.canvas.draw()
         
+    def setup_output_panel(self, parent):
+        """Set up the ATLC output panel"""
+        output_frame = ttk.Frame(parent, relief=tk.GROOVE, borderwidth=2, padding="10")
+        output_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        
+        # Label
+        ttk.Label(output_frame, text="ATLC Output:", style='Section.TLabel').pack(anchor=tk.W, pady=(0, 5))
+        
+        # Text widget with scrollbar
+        text_frame = ttk.Frame(output_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.output_text = tk.Text(text_frame, height=8, wrap=tk.WORD, 
+                                   yscrollcommand=scrollbar.set,
+                                   font=('Courier', 9),
+                                   bg='#F8F9FA', fg='#2C3E50')
+        self.output_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.output_text.yview)
+        
+        # Initial message
+        self.output_text.insert('1.0', 'ATLC output will appear here after saving and calculating...')
+        self.output_text.config(state=tk.DISABLED)
+        
     def update_input_fields(self):
         """Update input fields based on selected trace type"""
         # Clear existing fields
@@ -146,20 +178,23 @@ class PCBTraceVisualizer:
                 ('Trace Width (mm)', 'width', '0.5'),
                 ('Trace Thickness (mm)', 'thickness', '0.035'),
                 ('Substrate Height (mm)', 'substrate_h', '1.6'),
-                ('Solder Mask Thickness (mm)', 'mask_thickness', '0.025')
+                ('Solder Mask Thickness (mm)', 'mask_thickness', '0.025'),
+                ('Dielectric Constant (Er)', 'dielectric_er', '4.4')
             ],
             'stripline': [
                 ('Trace Width (mm)', 'width', '0.5'),
                 ('Trace Thickness (mm)', 'thickness', '0.035'),
                 ('Substrate Height (mm)', 'substrate_h', '1.6'),
-                ('Top Dielectric (mm)', 'top_dielectric', '0.8')
+                ('Top Dielectric (mm)', 'top_dielectric', '0.8'),
+                ('Dielectric Constant (Er)', 'dielectric_er', '4.4')
             ],
             'differential_pair': [
                 ('Trace Width (mm)', 'width', '0.4'),
                 ('Trace Thickness (mm)', 'thickness', '0.035'),
                 ('Trace Spacing (mm)', 'spacing', '0.3'),
                 ('Substrate Height (mm)', 'substrate_h', '1.6'),
-                ('Solder Mask Thickness (mm)', 'mask_thickness', '0.025')
+                ('Solder Mask Thickness (mm)', 'mask_thickness', '0.025'),
+                ('Dielectric Constant (Er)', 'dielectric_er', '4.4')
             ],
             'coplanar_differential': [
                 ('Trace Width (mm)', 'width', '0.4'),
@@ -167,14 +202,16 @@ class PCBTraceVisualizer:
                 ('Trace Spacing (mm)', 'spacing', '0.3'),
                 ('Ground Gap (mm)', 'ground_gap', '0.2'),
                 ('Ground Width (mm)', 'ground_width', '1.0'),
-                ('Substrate Height (mm)', 'substrate_h', '1.6')
+                ('Substrate Height (mm)', 'substrate_h', '1.6'),
+                ('Dielectric Constant (Er)', 'dielectric_er', '4.4')
             ],
             'coplanar_waveguide': [
                 ('Trace Width (mm)', 'width', '0.5'),
                 ('Trace Thickness (mm)', 'thickness', '0.035'),
                 ('Ground Gap (mm)', 'ground_gap', '0.2'),
                 ('Ground Width (mm)', 'ground_width', '1.5'),
-                ('Substrate Height (mm)', 'substrate_h', '1.6')
+                ('Substrate Height (mm)', 'substrate_h', '1.6'),
+                ('Dielectric Constant (Er)', 'dielectric_er', '4.4')
             ]
         }
         
@@ -261,16 +298,6 @@ class PCBTraceVisualizer:
                           edgecolor='none', linewidth=0)
         self.ax.add_patch(ground)
         
-        # Solder mask (on sides and top)
-        mask_left = Rectangle((-total_w/2, 0), (total_w-w)/2 - 0.1, m,
-                             facecolor=self.colors['solder_mask'],
-                             edgecolor='none', linewidth=0, alpha=0.7)
-        mask_right = Rectangle((w/2 + 0.1, 0), (total_w-w)/2 - 0.1, m,
-                              facecolor=self.colors['solder_mask'],
-                              edgecolor='none', linewidth=0, alpha=0.7)
-        self.ax.add_patch(mask_left)
-        self.ax.add_patch(mask_right)
-        
         self.ax.set_xlim(-total_w/2, total_w/2)
         self.ax.set_ylim(-h, t + m)
         
@@ -347,19 +374,6 @@ class PCBTraceVisualizer:
                                facecolor=self.colors['signal_neg'],
                                edgecolor='none', linewidth=0)
         self.ax.add_patch(trace_right)
-        
-        # Solder mask
-        mask_parts = [
-            Rectangle((-total_w/2, 0), (total_w - 2*w - s)/2 - 0.05, m,
-                     facecolor=self.colors['solder_mask'], edgecolor='none', linewidth=0, alpha=0.7),
-            Rectangle((-s/2 + 0.05, 0), s - 0.1, m,
-                     facecolor=self.colors['solder_mask'], edgecolor='none', linewidth=0, alpha=0.7),
-            Rectangle((s/2 + w + 0.05, 0), (total_w - 2*w - s)/2 - 0.05, m,
-                     facecolor=self.colors['solder_mask'], edgecolor='none', linewidth=0, 
-                     alpha=0.7)
-        ]
-        for mask in mask_parts:
-            self.ax.add_patch(mask)
         
         self.ax.set_xlim(-total_w/2, total_w/2)
         self.ax.set_ylim(-h, t + m)
@@ -458,7 +472,7 @@ class PCBTraceVisualizer:
         self.ax.set_ylim(-h, t)
         
     def save_bmp(self):
-        """Save the current visualization as a BMP file"""
+        """Save the current visualization as a BMP file and run ATLC"""
         if not self.ax.patches:
             messagebox.showwarning("No Visualization", 
                                   "Please generate a visualization first!")
@@ -479,11 +493,66 @@ class PCBTraceVisualizer:
                 buf.seek(0)
                 
                 # Convert to BMP using PIL
-                img = Image.open(buf)
+                img = Image.open(buf).convert('RGB')
                 img.save(filename, format='BMP')
                 buf.close()
                 
-                messagebox.showinfo("Success", f"Image saved to:\n{filename}")
+                # Clear previous output
+                self.output_text.config(state=tk.NORMAL)
+                self.output_text.delete('1.0', tk.END)
+                
+                # Get dielectric constant from input fields
+                try:
+                    dielectric_er = self.entries['dielectric_er'].get()
+                    dielectric_rgb = self.colors['substrate'][1:]  # RGB value of the dielectric color
+                    
+                    # Write status to output
+                    self.output_text.insert(tk.END, f"Image saved to: {filename}\n")
+                    self.output_text.insert(tk.END, f"Running ATLC with Er={dielectric_er}...\n\n")
+                    self.output_text.config(state=tk.DISABLED)
+                    self.root.update()  # Update UI to show progress
+                    
+                    # Run atlc command
+                    cmd = ['atlc', f'-d{dielectric_rgb}={dielectric_er}', filename]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    
+                    # Update output with results
+                    self.output_text.config(state=tk.NORMAL)
+                    if result.returncode == 0:
+                        self.output_text.insert(tk.END, "ATLC calculation completed successfully!\n")
+                        self.output_text.insert(tk.END, "=" * 60 + "\n")
+                        self.output_text.insert(tk.END, result.stdout)
+                        if result.stderr:
+                            self.output_text.insert(tk.END, "\n" + "=" * 60 + "\n")
+                            self.output_text.insert(tk.END, "Additional Info:\n")
+                            self.output_text.insert(tk.END, result.stderr)
+                        messagebox.showinfo("Success", f"Image saved and ATLC calculation completed!\nCheck the output panel for results.")
+                    else:
+                        self.output_text.insert(tk.END, "ATLC Error:\n")
+                        self.output_text.insert(tk.END, "=" * 60 + "\n")
+                        self.output_text.insert(tk.END, result.stderr if result.stderr else "Unknown error occurred")
+                        messagebox.showwarning("ATLC Warning", "ATLC encountered an error. Check the output panel for details.")
+                    
+                    self.output_text.config(state=tk.DISABLED)
+                    self.output_text.see(tk.END)  # Scroll to bottom
+                        
+                except subprocess.TimeoutExpired:
+                    self.output_text.config(state=tk.NORMAL)
+                    self.output_text.insert(tk.END, "\nATLC Error: Calculation timed out after 30 seconds\n")
+                    self.output_text.config(state=tk.DISABLED)
+                    messagebox.showwarning("ATLC Timeout", "ATLC timed out after 30 seconds")
+                except FileNotFoundError:
+                    self.output_text.config(state=tk.NORMAL)
+                    self.output_text.insert(tk.END, "\nATLC Error: Command not found\n")
+                    self.output_text.insert(tk.END, "Please ensure atlc is installed and in your PATH\n")
+                    self.output_text.config(state=tk.DISABLED)
+                    messagebox.showwarning("ATLC Not Found", "ATLC command not found. Please ensure atlc is installed.")
+                except Exception as atlc_error:
+                    self.output_text.config(state=tk.NORMAL)
+                    self.output_text.insert(tk.END, f"\nATLC Error: {str(atlc_error)}\n")
+                    self.output_text.config(state=tk.DISABLED)
+                    messagebox.showwarning("ATLC Error", f"ATLC error: {str(atlc_error)}")
+                    
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save image:\n{str(e)}")
 
