@@ -293,13 +293,13 @@ class PCBTraceVisualizer:
         self.ax.add_patch(trace)
         
         # Ground plane (green copper)
-        ground = Rectangle((-total_w/2, -h), total_w, 0.035,
+        ground = Rectangle((-total_w/2, -h-t), total_w, t,
                           facecolor=self.colors['copper'],
                           edgecolor='none', linewidth=0)
         self.ax.add_patch(ground)
         
         self.ax.set_xlim(-total_w/2, total_w/2)
-        self.ax.set_ylim(-h, t + m)
+        self.ax.set_ylim(-h-t, t + m)
         
     def draw_stripline(self, dims):
         """Draw stripline cross-section"""
@@ -358,7 +358,7 @@ class PCBTraceVisualizer:
         self.ax.add_patch(substrate)
         
         # Ground plane (green copper)
-        ground = Rectangle((-total_w/2, -h), total_w, 0.035,
+        ground = Rectangle((-total_w/2, -h-t), total_w, t,
                           facecolor=self.colors['copper'],
                           edgecolor='none', linewidth=0)
         self.ax.add_patch(ground)
@@ -376,7 +376,7 @@ class PCBTraceVisualizer:
         self.ax.add_patch(trace_right)
         
         self.ax.set_xlim(-total_w/2, total_w/2)
-        self.ax.set_ylim(-h, t + m)
+        self.ax.set_ylim(-h-t, t + m)
         
     def draw_coplanar_differential(self, dims):
         """Draw coplanar differential pair cross-section"""
@@ -396,7 +396,7 @@ class PCBTraceVisualizer:
         self.ax.add_patch(substrate)
         
         # Bottom ground plane (green copper)
-        gnd_bottom = Rectangle((-total_w/2, -h), total_w, 0.035,
+        gnd_bottom = Rectangle((-total_w/2, -h-t), total_w, t,
                               facecolor=self.colors['copper'],
                               edgecolor='none', linewidth=0)
         self.ax.add_patch(gnd_bottom)
@@ -426,7 +426,7 @@ class PCBTraceVisualizer:
         self.ax.add_patch(trace_right)
         
         self.ax.set_xlim(-total_w/2, total_w/2)
-        self.ax.set_ylim(-h, t)
+        self.ax.set_ylim(-h-t, t)
         
     def draw_coplanar_waveguide(self, dims):
         """Draw coplanar waveguide cross-section"""
@@ -445,7 +445,7 @@ class PCBTraceVisualizer:
         self.ax.add_patch(substrate)
         
         # Bottom ground plane (green copper)
-        gnd_bottom = Rectangle((-total_w/2, -h), total_w, 0.035,
+        gnd_bottom = Rectangle((-total_w/2, -h-t), total_w, t,
                               facecolor=self.colors['copper'],
                               edgecolor='none', linewidth=0)
         self.ax.add_patch(gnd_bottom)
@@ -469,7 +469,7 @@ class PCBTraceVisualizer:
         self.ax.add_patch(trace)
         
         self.ax.set_xlim(-total_w/2, total_w/2)
-        self.ax.set_ylim(-h, t)
+        self.ax.set_ylim(-h-t, t)
         
     def save_bmp(self):
         """Save the current visualization as a BMP file and run ATLC"""
